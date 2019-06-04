@@ -25,21 +25,17 @@ Provided Virtual File Systems
 
 There are three virtual file system implementations provided as a part of this library:
 
-	* `InMemory` -- This filesystem uses an [`MVar`](https://hackage.haskell.org/package/base-4.12.0.0/docs/Control-Concurrent-MVar.html) to store the state of the filesystem
-		in memory. All the data for all the files are currently stored in-memory as the raw bytes: future versions of this library may persist larger files into compressed
-		bytestrings or temp files.
-	* `Pure` -- This filesystem uses [`StateT`](https://hackage.haskell.org/package/transformers-0.5.6.2/docs/Control-Monad-Trans-State-Lazy.html#t:StateT) to persist the state
-		of the filesystem. Unlike `InMemory`, the state is not portable and changes in state are not persisted after the monad resolves. However, this implementation is pure,
-		which means it can be used with pure conduits or as a way to make testing faster and idempotent.
-	* `Disk` -- This virtual file system is the traditional disk-based filesystem, with folders persisted to the operating system's filesystem.
+* `InMemory` -- This filesystem uses an [`MVar`](https://hackage.haskell.org/package/base-4.12.0.0/docs/Control-Concurrent-MVar.html) to store the state of the filesystem in memory. All the data for all the files are currently stored in-memory as the raw bytes: future versions of this library may persist larger files into compressed bytestrings or temp files.
+* `Pure` -- This filesystem uses [`StateT`](https://hackage.haskell.org/package/transformers-0.5.6.2/docs/Control-Monad-Trans-State-Lazy.html#t:StateT) to persist the state of the filesystem. Unlike `InMemory`, the state is not portable and changes in state are not persisted after the monad resolves. However, this implementation is pure, which means it can be used with pure conduits or as a way to make testing faster and idempotent.
+* `Disk` -- This virtual file system is the traditional disk-based filesystem, with folders persisted to the operating system's filesystem.
 
 Other Virtual File Systems
 -------------------------------
 
 There are other VFS implementations in the works:
 
-	* `Zip` -- Treat a `.zip` file as a filesystem, and provide conduits that will auto-expand zip entries provided by upstream VFS conduits.
-	* `Tar` -- Treat a `.tar` file as a filesystem, and provide conduits that will auto-expand tar entries provided by upstream VFS conduits.
-	* `S3` -- Treat an AWS S3 bucket as a filesystem.
+* `Zip` -- Treat a `.zip` file as a filesystem, and provide conduits that will auto-expand zip entries provided by upstream VFS conduits.
+* `Tar` -- Treat a `.tar` file as a filesystem, and provide conduits that will auto-expand tar entries provided by upstream VFS conduits.
+* `S3` -- Treat an AWS S3 bucket as a filesystem.
 
 In addition, we are looking to implement a conduit which automatically uncompresses or compresses `.xz`, `.lzma`, `.z`, and `.gz` files provided by upstream VFS conduits.
