@@ -32,6 +32,8 @@ dependencies:
 - monad-loops >= 0.4.3 && < 0.5
 - extra >= 1.6.16 && < 1.7
 - resourcet >= 1.2.2 && < 1.3
+- transformers >= 0.5.6.2 && < 0.6
+- text >= 1.2.3.1 && < 1.3
 
 default-extensions:
   - AutoDeriveTypeable
@@ -91,6 +93,7 @@ ghc-options:
   - -optP-Wno-nonportable-include-path
   - -fno-warn-type-defaults
   - -fno-warn-tabs
+  - -fno-warn-unused-top-binds
 
 library:
   source-dirs: src

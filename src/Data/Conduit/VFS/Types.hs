@@ -1,3 +1,9 @@
+{-|
+
+Description: The types that make up this library.
+
+-}
+
 module Data.Conduit.VFS.Types
 ( FilePath
 , ConduitT
@@ -66,7 +72,7 @@ class (Monad m) => ReadVFSC m where
 	--   If an input 'FilePath' is not a 'VDirectory', it should be passed through directly.
 	vfsChildrenC :: VFSPipe m
 	vfsChildrenC = awaitForever $ \path -> do
-			children <- yield path .| vfsDescendentsC .| filterC (\it -> path == takeDirectory it ) .| sinkList
+			children <- yield path .| vfsDescendentsC .| filterC (\it -> path == takeDirectory it ) .| sinkList -- TODO: Is this a bug if we encounter paths like /foo/bar/foo?
 			yieldMany children
 	{-# INLINEABLE vfsChildrenC #-}
 

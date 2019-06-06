@@ -1,6 +1,7 @@
 {-|
-Description: VFS persisted in-memory. This is intended to demonstrate how a VFS can be defined, but is also entirely usable in code
-if you find its functionality useful.
+Description: VFS persisted in-memory
+
+This is intended to demonstrate how a VFS can be defined, but is also entirely usable in code if you find its functionality useful.
 
 This VFS implementation stores its values in a lazy in-memory map, which is itself persisted into an 'MVar' and captured in the monadic state.
 This requires the monad to be in the class 'MonadUnliftIO', but that allows the state to be shared throughout the application, maintaining
@@ -25,7 +26,6 @@ module Data.Conduit.VFS.InMemory
 	, runInMemoryVFS
 	, runInMemoryVFS'
 	, mkInMemoryVFSRoot
-	, module Data.Conduit.VFS.Import
 	) where
 
 import ClassyPrelude hiding (ByteString, handle)
@@ -36,7 +36,8 @@ import qualified Data.HashMap.Lazy as HashMap
 import Data.HashMap.Lazy (HashMap)
 import System.FilePath (splitPath)
 import System.IO (IOMode(ReadMode), hSetBinaryMode)
-import Control.Monad.Trans.Resource (runResourceT)
+import Control.Monad.Fail (MonadFail)
+import qualified Data.Text as Text
 
 -- | The possible kinds of nodes
 data IMNode
@@ -50,7 +51,7 @@ data IMFile
 
 -- | Definition of a directory
 newtype IMDirectory = IMDirectory
-	{ imdNodes :: HashMap String IMNode   -- ^ The nodes contained within the directory
+	{ imdNodes :: HashMap Text IMNode   -- ^ The nodes contained within the directory
 	}
 
 instance Semigroup IMDirectory where
@@ -67,7 +68,7 @@ instance Semigroup IMDirectory where
 instance Monoid IMDirectory where
 	mempty = IMDirectory { imdNodes = mempty }
 
-type instance Element IMDirectory = (String, IMNode)
+type instance Element IMDirectory = (Text, IMNode)
 
 instance MonoFunctor IMDirectory where
 	omap f oldImd = IMDirectory{ imdNodes = HashMap.fromList (f <$> HashMap.toList (imdNodes oldImd)) }
@@ -89,7 +90,7 @@ newtype InMemoryVFSRoot = InMemoryVFSRoot { imvfsStore :: MVar IMDirectory }
 -- | The basic implementation of the VFS.
 newtype InMemoryVFS m a = InMemoryVFS
 	{ unIMVFS :: ReaderT InMemoryVFSRoot m a }
-	deriving (Functor, Monad, MonadTrans, MonadIO)
+	deriving (Functor, Monad, MonadTrans, MonadIO, MonadFail)
 
 instance (Functor f) => Applicative (InMemoryVFS f)
 instance (Monad m) => MonadReader InMemoryVFSRoot (InMemoryVFS m)
@@ -141,7 +142,7 @@ instance (MonadUnliftIO m) => ReadVFSC (InMemoryVFS m) where
 			loop [] (IMDirectory _) = Just VDirectory
 			loop ("/":rest) imd = loop rest imd
 			loop (nextDirPath:rest) IMDirectory{imdNodes} =
-				case HashMap.lookup nextDirPath imdNodes of
+				case HashMap.lookup (Text.pack nextDirPath) imdNodes of
 					Nothing           -> Nothing
 					(Just imnode)     ->
 						case imnode of
@@ -160,7 +161,7 @@ instance (MonadUnliftIO m) => ReadVFSC (InMemoryVFS m) where
 			loop :: [FilePath] -> IMDirectory -> m (Maybe ByteString)
 			loop [] _ = return Nothing
 			loop [filename] IMDirectory{imdNodes} =
-				case HashMap.lookup filename imdNodes of
+				case HashMap.lookup (Text.pack filename) imdNodes of
 					Nothing                     -> return Nothing
 					(Just (IMNodeDir _))        -> return Nothing
 					(Just (IMNodeFile fileData)) ->
@@ -168,7 +169,7 @@ instance (MonadUnliftIO m) => ReadVFSC (InMemoryVFS m) where
 							(Resident bytes)    -> return (Just bytes)
 							EmptyFile           -> return (Just mempty)
 			loop (dirname:rest) IMDirectory{imdNodes} =
-				case HashMap.lookup dirname imdNodes of
+				case HashMap.lookup (Text.pack dirname) imdNodes of
 					(Just (IMNodeDir imd)) -> loop rest imd
 					_                      -> return Nothing
 	{-# INLINEABLE vfsContentsC #-}
@@ -184,7 +185,7 @@ instance (MonadUnliftIO m) => ReadVFSC (InMemoryVFS m) where
 			loop :: [FilePath] -> IMDirectory -> m (Maybe ByteString)
 			loop [] _ = return Nothing
 			loop [filename] IMDirectory{imdNodes} =
-				case HashMap.lookup filename imdNodes of
+				case HashMap.lookup (Text.pack filename) imdNodes of
 					Nothing                      -> return Nothing
 					(Just (IMNodeDir _))         -> return Nothing
 					(Just (IMNodeFile filedata)) ->
@@ -192,7 +193,7 @@ instance (MonadUnliftIO m) => ReadVFSC (InMemoryVFS m) where
 							(Resident bytes)    -> return $ Just bytes
 							EmptyFile           -> return $ Just mempty
 			loop (dirname:rest) IMDirectory{imdNodes} =
-				case HashMap.lookup dirname imdNodes of
+				case HashMap.lookup (Text.pack dirname) imdNodes of
 					(Just (IMNodeDir imd)) -> loop rest imd
 					_                      -> return Nothing
 	{-# INLINEABLE vfsContentsEitherC #-}
@@ -201,11 +202,11 @@ instance (MonadUnliftIO m) => ReadVFSC (InMemoryVFS m) where
 			lift ( withIMVFSRootDir $ return . loop filepath (splitPath filepath) ) >>= yieldMany
 		where
 			loop :: FilePath -> [FilePath] -> IMDirectory -> [FilePath]
-			loop _ [] IMDirectory{imdNodes} = HashMap.keys imdNodes
+			loop _ [] IMDirectory{imdNodes} = Text.unpack <$> HashMap.keys imdNodes
 			loop filepath (foo:rest) IMDirectory{imdNodes} =
-				case HashMap.lookup foo imdNodes of
+				case HashMap.lookup (Text.pack foo) imdNodes of
 					(Just (IMNodeDir imd@(IMDirectory dir)))
-						| null rest          -> (filepath </>) <$> HashMap.keys dir
+						| null rest          -> (filepath </>) . Text.unpack <$> HashMap.keys dir
 						| otherwise          -> loop filepath rest imd
 					_                      -> mempty
 	{-# INLINEABLE vfsChildrenC #-}
@@ -229,13 +230,13 @@ instance (MonadUnliftIO m) => WriteVFSC (InMemoryVFS m) where
 			lift $ modifyIMVFSRootDir $ return . loop (IMNodeFile imfile) (splitPath filepath)
 		where
 			loop _ [] imd = imd
-			loop node [filename] imd@IMDirectory{imdNodes} = imd { imdNodes = HashMap.insert filename node imdNodes }
+			loop node [filename] imd@IMDirectory{imdNodes} = imd { imdNodes = HashMap.insert (Text.pack filename) node imdNodes }
 			loop node (name:rest) imd@IMDirectory{imdNodes} = imd { imdNodes = HashMap.alter
 				(\case
 					Nothing                     -> Just . IMNodeDir . loop node rest $ IMDirectory { imdNodes=mempty }
 					(Just (IMNodeDir childImd)) -> Just . IMNodeDir $ loop node rest childImd
 					whatever                    -> whatever
-				) name imdNodes }
+				) (Text.pack name) imdNodes }
 			writeBytes handle = do
 				nextInput <- peekC
 				let haveMoreBytes = case nextInput of
@@ -251,13 +252,13 @@ instance (MonadUnliftIO m) => WriteVFSC (InMemoryVFS m) where
 	vfsRemoveSink = awaitForever $ \filepath -> lift . modifyIMVFSRootDir $ return . loop (splitPath filepath)
 		where
 			loop [] imd = imd
-			loop [filename] imd@IMDirectory{imdNodes} = imd { imdNodes = HashMap.delete filename imdNodes }
+			loop [filename] imd@IMDirectory{imdNodes} = imd { imdNodes = HashMap.delete (Text.pack filename) imdNodes }
 			loop (name:rest) imd@IMDirectory{imdNodes} = imd
 				{ imdNodes = HashMap.adjust
 					(\case
 						(IMNodeDir childImd) -> IMNodeDir $ loop rest childImd
 						whatever             -> whatever
-					) name imdNodes
+					) (Text.pack name) imdNodes
 				}
 	{-# INLINE vfsRemoveSink #-}
 
