@@ -1,0 +1,135 @@
+name:                conduit-vfs
+version:             0.1.0.2
+github:              "RobertFischer/vfs-conduit"
+license:             BSD3
+author:              "Robert Fischer"
+maintainer:          "smokejumperit@gmail.com"
+copyright:           "(c)2019 Robert Fischer. All Rights Reserved. See LICENSE for liscensing terms."
+
+extra-source-files:
+  - README.md
+  - ChangeLog.md
+
+# Metadata used when publishing your package
+synopsis:            Virtual file system for Conduit; disk, pure, and in-memory impls.
+category:            Conduit, IO, Filesystem
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description: >2
+  The goal of this package is to provide a common library and the core implementations for things that can be made to look like filesystems.
+  In this package, a "filesystem" is tree of nodes, where the leaf nodes are files and the rest are directories. A "directory" is defined as
+  a node that contains other nodes, and those other nodes are each keyed by a name. A "file" is defined as a collection of (possibly empty)
+  bytes.
+
+  This package includes the core types for a Virtual File System (VFS) abstraction for conduit, along with three implementations.
+  The implementations are "disk" (write to the underlying filesystem), "in-memory" (store files in an MVar), and "pure" (pass
+  state in a State monad). Because of the nature of conduits, this library defaults to lazy implementations of various data
+  structures, including lazy ByteStrings and lazy HashMaps. Any overhead in space should be more than warranted by the savings through
+  just-in-time computations.
+
+  For more information, see the README on GitHub at <https://github.com/RobertFischer/vfs-conduit#README.md>
+
+dependencies:
+- base >= 4.7 && < 5
+- conduit >= 1.3.1.1 && < 1.4
+- conduit-extra >= 1.3.1.1 && < 1.4
+- mono-traversable >= 1.0.11.0 && < 1.1
+- classy-prelude >= 1.5.0 && < 1.6
+- filepath >= 1.4.2.1 && < 1.5
+- bytestring >= 0.10.8.2 && < 0.11
+- unliftio >= 0.2.10 && < 0.3
+- unordered-containers >= 0.2.10.0 && < 0.3
+- monad-loops >= 0.4.3 && < 0.5
+- extra >= 1.6.16 && < 1.7
+- resourcet >= 1.2.2 && < 1.3
+- transformers >= 0.5.6.2 && < 0.6
+- text >= 1.2.3.1 && < 1.3
+- directory >= 1.3.3.0 && < 1.4
+- unix >= 2.7.2.2 && < 2.8
+
+default-extensions:
+  - AutoDeriveTypeable
+  - BangPatterns
+  - BinaryLiterals
+  - ConstraintKinds
+  - DataKinds
+  - DefaultSignatures
+  - DeriveDataTypeable
+  - DeriveFoldable
+  - DeriveFunctor
+  - DeriveGeneric
+  - DeriveTraversable
+  - DoAndIfThenElse
+  - EmptyDataDecls
+  - ExistentialQuantification
+  - FlexibleContexts
+  - FlexibleInstances
+  - FunctionalDependencies
+  - GADTs
+  - GeneralizedNewtypeDeriving
+  - InstanceSigs
+  - KindSignatures
+  - LambdaCase
+  - MonadFailDesugaring
+  - MultiParamTypeClasses
+  - MultiWayIf
+  - NamedFieldPuns
+  - NoImplicitPrelude
+  - OverloadedStrings
+  - PartialTypeSignatures
+  - PatternGuards
+  - PolyKinds
+  - RankNTypes
+  - RecordWildCards
+  - ScopedTypeVariables
+  - StandaloneDeriving
+  - TypeFamilies
+  - TypeSynonymInstances
+  - ViewPatterns
+  - TemplateHaskell
+  - TupleSections
+  - UnboxedTuples
+  - QuasiQuotes
+# - DeriveAnyClass
+  - DeriveLift
+  - ExtendedDefaultRules
+
+ghc-options:
+  - -Wall
+  - -Wcompat
+  - -Widentities
+  - -Wincomplete-record-updates
+  - -Wincomplete-uni-patterns
+  - -Wpartial-fields
+  - -Wredundant-constraints
+  - -optP-Wno-nonportable-include-path
+  - -fno-warn-type-defaults
+  - -fno-warn-tabs
+  - -fno-warn-unused-top-binds
+
+library:
+  source-dirs: src
+  ghc-options:
+      - -O2
+      - -flate-dmd-anal
+      - -fmax-simplifier-iterations=12
+      - -fregs-iterative
+      - -fsimplifier-phases=6
+      - -flate-specialise
+      - -fstatic-argument-transformation
+      - -fstrictness-before=4
+      - -funfolding-keeness-factor=3
+
+tests:
+  conduit-vfs-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -O0
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - conduit-vfs

@@ -38,6 +38,6 @@ There are other VFS implementations in the works:
 * `Tar` -- Treat a `.tar` file as a filesystem, and provide conduits that will auto-expand tar entries provided by upstream VFS conduits.
 * `S3` -- Treat an AWS S3 bucket as a filesystem.
 * `Twitter` -- Treat Twitter as a file system.  (eg: `/users/AnthroPunk/status/1042294921216978944` goes to [`https://twitter.com/AnthroPunk/status/1042294921216978944`](https://twitter.com/AnthroPunk/status/1042294921216978944)).
-* `SQL` -- Treat any HDBC implementation as a filesystem. (eg: `/foos/id/12345` retrieves the tuple from the `foos` table where the `id` field is `12345`)
+* `SQL` -- Treat an HDBC implementation as a filesystem. (eg: `/foos/id/12345` retrieves the tuple from the `foos` table where the `id` field is `12345`)
 
 In addition, we are looking to implement a conduit which automatically uncompresses or compresses `.xz`, `.lzma`, `.z`, and `.gz` files provided by upstream VFS conduits.
