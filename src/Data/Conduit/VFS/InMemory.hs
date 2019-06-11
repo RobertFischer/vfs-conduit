@@ -14,11 +14,6 @@ paths being "relative" or "absolute" for this VFS.  It is also possible for a fi
 are appended with @/@, as per 'splitPath'.  (This implementation detail is up for debate and may be changed in a future major release: please file
 an issue if you want to have a discussion around it.)
 
-__Note__: If you want to use this in production, I would encourage you to flesh out the implementations of the 'VFSC' typeclasses.
-The default implementations do work and the performance is probably fine for all intents and purposes, but the default
-implementations require unnecessary 'MVar' accesses, which could concievably become a performance bottleneck. If you do flesh out the
-implementations, please submit a PR back to upstream and we will be most grateful. Thanks!
-
 -}
 module Data.Conduit.VFS.InMemory
 	( InMemoryVFS
@@ -29,13 +24,12 @@ module Data.Conduit.VFS.InMemory
 	) where
 
 import ClassyPrelude hiding (ByteString, handle)
+import Control.Monad.Extra (ifM)
 import Data.Conduit.VFS.Import
-import UnliftIO.Temporary (withSystemTempFile)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.HashMap.Lazy as HashMap
 import Data.HashMap.Lazy (HashMap)
 import System.FilePath (splitPath)
-import System.IO (IOMode(ReadMode), hSetBinaryMode)
 import Control.Monad.Fail (MonadFail)
 import qualified Data.Text as Text
 
@@ -67,6 +61,7 @@ instance Semigroup IMDirectory where
 
 instance Monoid IMDirectory where
 	mempty = IMDirectory { imdNodes = mempty }
+	{-# INLINE mempty #-}
 
 type instance Element IMDirectory = (Text, IMNode)
 
@@ -90,11 +85,7 @@ newtype InMemoryVFSRoot = InMemoryVFSRoot { imvfsStore :: MVar IMDirectory }
 -- | The basic implementation of the VFS.
 newtype InMemoryVFS m a = InMemoryVFS
 	{ unIMVFS :: ReaderT InMemoryVFSRoot m a }
-	deriving (Functor, Monad, MonadTrans, MonadIO, MonadFail)
-
-instance (Functor f) => Applicative (InMemoryVFS f)
-instance (Monad m) => MonadReader InMemoryVFSRoot (InMemoryVFS m)
-instance (Functor m, MonadIO m) => MonadUnliftIO (ConduitT i o (InMemoryVFS m))
+	deriving (Functor, Applicative, Monad, MonadTrans, MonadIO, MonadFail, MonadReader InMemoryVFSRoot)
 
 -- | Creates an 'InMemoryVFSRoot' that can be shared among many 'InMemoryVFS' invocations.
 mkInMemoryVFSRoot :: (MonadIO m) => m InMemoryVFSRoot
@@ -216,19 +207,23 @@ instance (MonadUnliftIO m) => WriteVFSC (InMemoryVFS m) where
 
 	vfsWriteEitherSink = awaitForever $ \case
 		(Right _) -> return () -- Ignore: bytes without a file they belong to!
-		(Left filepath) -> do
-			imfile <- withSystemTempFile "imvfsc.tmp" $ \tmpFilePath tmpHandle -> do
-				liftIO $ hSetBuffering tmpHandle $ BlockBuffering Nothing
-				liftIO $ hSetBinaryMode tmpHandle True
-				writeBytes tmpHandle
-				fileSize <- liftIO $ hFileSize tmpHandle
-				hClose tmpHandle
-				if fileSize == 0 then
-					return EmptyFile
+		(Left filepath) -> awaitBytes >>= \bytes ->
+			let imfile =
+				if null bytes then
+					EmptyFile
 				else
-					liftIO $ Resident <$> withBinaryFile tmpFilePath ReadMode LBS.hGetContents
+					Resident bytes
+			in
 			lift $ modifyIMVFSRootDir $ return . loop (IMNodeFile imfile) (splitPath filepath)
 		where
+			hasMoreBytes = peekC >>= \case
+				(Just (Right _)) -> return True
+				_ -> return False
+			awaitBytes =
+				flip (ifM hasMoreBytes) (return mempty) $
+					await >>= \case
+						(Just (Right bytes)) -> LBS.append bytes <$> awaitBytes
+						_ -> fail "We should have more bytes, but we don't."
 			loop _ [] imd = imd
 			loop node [filename] imd@IMDirectory{imdNodes} = imd { imdNodes = HashMap.insert (Text.pack filename) node imdNodes }
 			loop node (name:rest) imd@IMDirectory{imdNodes} = imd { imdNodes = HashMap.alter
@@ -237,16 +232,6 @@ instance (MonadUnliftIO m) => WriteVFSC (InMemoryVFS m) where
 					(Just (IMNodeDir childImd)) -> Just . IMNodeDir $ loop node rest childImd
 					whatever                    -> whatever
 				) (Text.pack name) imdNodes }
-			writeBytes handle = do
-				nextInput <- peekC
-				let haveMoreBytes = case nextInput of
-					(Just (Right _)) -> True
-					_                -> False
-				when haveMoreBytes $ do
-					moreBytes <- await
-					case moreBytes of
-						(Just (Right bytes)) -> liftIO $ hPut handle (LBS.toStrict bytes)
-						_                    -> return ()
 	{-# INLINEABLE vfsWriteEitherSink #-}
 
 	vfsRemoveSink = awaitForever $ \filepath -> lift . modifyIMVFSRootDir $ return . loop (splitPath filepath)
