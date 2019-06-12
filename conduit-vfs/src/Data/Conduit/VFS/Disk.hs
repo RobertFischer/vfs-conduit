@@ -17,30 +17,27 @@ module Data.Conduit.VFS.Disk
 
 
 import ClassyPrelude hiding (ByteString, handle, hash, bracket)
+import Control.Monad.Catch (MonadCatch, MonadMask)
 import Control.Monad.Extra (ifM)
 import Control.Monad.Fail (MonadFail)
 import Control.Monad.Loops (whileM_)
 import Data.Conduit.VFS.Import
+import System.Directory (removeFile)
 import System.IO.Extra (openBinaryFile)
 import System.Posix (getFileStatus, isRegularFile, isDirectory)
-import System.Directory (removeFile)
 import UnliftIO.Directory (doesFileExist, listDirectory)
 import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Lazy as LBS
 
 -- | The basic implementation of the VFS.
 newtype DiskVFS m a = DiskVFS { unDVFS :: m a }
-	deriving (Applicative, Functor, MonadFail, Monad)
-
-instance (MonadIO m) => MonadIO (DiskVFS m) where
-	liftIO = DiskVFS . liftIO
-	{-# INLINE liftIO #-}
+	deriving (Applicative, Functor, MonadFail, Monad, MonadThrow, MonadCatch, MonadMask, MonadResource, MonadIO)
 
 instance (MonadUnliftIO m) => MonadUnliftIO (DiskVFS m) where
 	askUnliftIO = do
 		(UnliftIO interiorUnliftIO) <- lift askUnliftIO
 		return $ UnliftIO $ \(DiskVFS interior) -> interiorUnliftIO interior
-	{-# INLINE askUnliftIO #-}
+	{-# INLINEABLE askUnliftIO #-}
 
 instance MonadTrans DiskVFS where
 	lift = DiskVFS
@@ -122,10 +119,11 @@ instance (MonadUnliftIO m) => WriteVFSC (DiskVFS m) where
 
 	vfsRemoveSink = awaitForever $ \filename ->
 			whenM (isExistingRegularFile filename) (liftIO $ removeFile filename)
-	{-# INLINE vfsRemoveSink #-}
+	{-# INLINEABLE vfsRemoveSink #-}
 
 isExistingRegularFile :: MonadIO m => FilePath -> m Bool
 isExistingRegularFile filepath = liftIO $ liftM2 (&&) (doesFileExist filepath) (isRegularFile <$> getFileStatus filepath)
+{-# INLINEABLE isExistingRegularFile #-}
 
 -- | A class denoting that the type is usable as VFS conduits for reading and writing.
 instance (MonadUnliftIO m) => VFSC (DiskVFS m)
