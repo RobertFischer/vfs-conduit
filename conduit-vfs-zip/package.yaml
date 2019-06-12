@@ -111,7 +111,6 @@ ghc-options:
 library:
   source-dirs: src
   ghc-options:
-      - -O2
       - -flate-dmd-anal
       - -fmax-simplifier-iterations=12
       - -fregs-iterative

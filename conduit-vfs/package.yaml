@@ -1,5 +1,5 @@
 name:                conduit-vfs
-version:             0.1.0.2
+version:             0.1.0.3
 github:              "RobertFischer/vfs-conduit"
 license:             BSD3
 author:              "Robert Fischer"
@@ -114,7 +114,6 @@ ghc-options:
 library:
   source-dirs: src
   ghc-options:
-      - -O2
       - -flate-dmd-anal
       - -fmax-simplifier-iterations=12
       - -fregs-iterative
