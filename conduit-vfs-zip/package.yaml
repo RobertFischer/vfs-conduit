@@ -1,5 +1,5 @@
 name:                conduit-vfs-zip
-version:             0.1.0.0
+version:             0.1.0.1
 github:              "RobertFischer/vfs-conduit"
 license:             BSD3
 author:              "Robert Fischer"
@@ -12,7 +12,7 @@ extra-source-files:
 
 # Metadata used when publishing your package
 synopsis:            Zip archive interface for the Conduit Virtual File System.
-# category:            Web
+category:            Conduit, IO, Filesystem, Zip, Compression
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
