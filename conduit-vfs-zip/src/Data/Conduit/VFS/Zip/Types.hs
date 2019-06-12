@@ -8,19 +8,19 @@ import ClassyPrelude hiding (ByteString, finally)
 import Codec.Archive.Zip (Archive, findEntryByPath, fromEntry, filesInArchive, addEntryToArchive, toEntry, deleteEntryFromArchive, toArchive, emptyArchive, fromArchive)
 import Conduit
 import Control.Monad.Catch (MonadCatch, MonadMask, finally)
-import Control.Monad.Extra (whenJust)
+import Control.Monad.Extra (whenJust, ifM)
 import Control.Monad.Fail (MonadFail)
 import Control.Monad.Reader.Class (MonadReader(..))
 import Control.Monad.State.Lazy (StateT, put, get, MonadState, modify)
 import Data.Conduit.VFS.Types
-import Data.List.Extra (split)
-import System.FilePath (pathSeparator, isPathSeparator, isExtensionOf, isSearchPathSeparator)
+import Data.List.Extra (split, nub)
+import System.FilePath (isPathSeparator, isExtensionOf, isSearchPathSeparator, takeDirectory, searchPathSeparator)
 import qualified Data.ByteString.Lazy as LBS
 import UnliftIO.Directory (doesFileExist, doesDirectoryExist, listDirectory, removeFile)
 
 -- | Represents a single zip file as a conduit. Note that the zip file is resident in-memory as an 'Archive'. The 'Archive' type holds a list of 'Entry',
---   each of which holds their content as a lazy 'ByteString'. Because of this, you can use 'ZipVFS' as an alternative to 'PureVFS', which stores
---   its in-memory data as compressed bytes. It can also be used as an alternative to 'InMemoryVFS' as long as the conduit execution is single-threaded.
+--   each of which holds their content as a lazy 'ByteString'. Because of this, you can use 'ZipVFS' as an alternative to 'Data.Conduit.VFS.PureVFS', which stores
+--   its in-memory data as compressed bytes. It can also be used as an alternative to 'Data.Conduit.VFS.InMemoryVFS' as long as the conduit execution is single-threaded.
 newtype ZipVFS m a = ZipVFS { unZipVFS :: StateT Archive m a }
     deriving (Functor, Applicative, Monad, MonadTrans, MonadState Archive, MonadIO, MonadFail, MonadThrow, MonadCatch, MonadMask, MonadResource)
 
@@ -80,7 +80,7 @@ instance (Monad m) => VFSC (ZipVFS m)
 --   opposite of 'normalize'.
 unnormalize :: FilePath -> FilePath
 unnormalize filepath =
-   if pathSeparator == '/' then
+   if isPathSeparator '/' then
       filepath
    else
       intercalate "/" $ split isPathSeparator filepath
@@ -125,9 +125,33 @@ instance (MonadUnliftIO m) => ReadVFSC (DiskZipsVFS m) where
          restHandler (filepath, content) =
             case content of
                (FileContent _ _)       -> yield filepath
-               (DirContent _ children) -> yieldMany ( (filepath </>) <$> children )
                (NoContent _)           -> return ()
-         zipHandler (filepath, archive) = yieldMany ( ((filepath <> [pathSeparator]) <>) <$> filesInArchive archive )
+               (DirContent _ children) -> do
+                  let absoluteChildren = (filepath </>) <$> children
+                  yieldMany absoluteChildren
+                  forM_ absoluteChildren recurseDescendents
+         recurseDescendents rootFilePath =
+            ifM (liftIO $ doesFileExist rootFilePath)
+               ( do
+                  yield rootFilePath
+                  when ("zip" `isExtensionOf` rootFilePath) $ do
+                     archive <- toArchive <$> liftIO (LBS.readFile rootFilePath)
+                     transPipe unDiskZipsVFS $ zipHandler (rootFilePath, archive)
+               )
+               ( whenM (liftIO $ doesDirectoryExist rootFilePath) $ do
+                  yield rootFilePath
+                  children <- liftIO $  listDirectory rootFilePath
+                  let absoluteChildren = (rootFilePath </>) <$> children
+                  forM_ absoluteChildren recurseDescendents
+               )
+         zipHandler :: (FilePath, Archive) -> VFSPipe (DiskZipsVFS m)
+         zipHandler (filepath, archive) =
+            let archiveFiles = filesInArchive archive in
+            let archiveDirs = nub ( takeDirectory <$> archiveFiles ) in
+            let prefix = (filepath <> [searchPathSeparator]) in
+            do
+               yieldMany $ ( prefix <>) <$> archiveDirs
+               yieldMany $ ( prefix <>) <$> archiveFiles
 
 
 instance (MonadUnliftIO m) => WriteVFSC (DiskZipsVFS m) where
